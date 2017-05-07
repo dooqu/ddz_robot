@@ -3,8 +3,7 @@
 #include <functional>
 #include "boost/asio.hpp"
 #include "robot_manager.h"
-#include "service/task_timer.h"
-#include "service/game_zone.h"
+
 
 using namespace std;
 
@@ -25,7 +24,7 @@ int main()
         int g_robot_id = 0;
         int g_room_id = 0;
 
-        for(int room_index = 0; room_index < 30; ++room_index)
+        for(int room_index = 0; room_index < 60; ++room_index)
         {
             for(int i = 0; i < 300; i++)
             {

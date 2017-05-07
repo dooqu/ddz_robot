@@ -5,8 +5,7 @@
 #include <cstdio>
 
 #include "boost/asio.hpp"
-#include "service/game_client.h"
-#include "util/tick_count.h"
+#include "dooqu_service.h"
 
 using namespace dooqu_service::service;
 

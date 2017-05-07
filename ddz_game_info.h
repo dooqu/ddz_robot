@@ -2,10 +2,8 @@
 #define DDZ_GAME_INFO_H
 
 #include <set>
-#include "service/game_info.h"
-#include "service/task_timer.h"
+#include "dooqu_service.h"
 #include "poker_info.h"
-#include "util/char_key_op.h"
 #include "ddz_robot.h"
 #include "poker_finder.h"
 

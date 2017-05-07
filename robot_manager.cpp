@@ -442,7 +442,7 @@ void robot_manager::on_robot_in_desk(ddz_robot* robot, command* command)
         game_info->set_desk_id(desk_index);
         this->queue_task(std::bind(static_cast<void(ddz_robot::*)(const char*, ...)>(&ddz_robot::write), robot, "RDY%c", NULL), dooqu_service::util::random(1000, 3030));
 
-        std::cout << robot->id() << "in desk {" << desk_index << "}" << std::endl;
+        //std::cout << robot->id() << "in desk {" << desk_index << "}" << std::endl;
     }
     else
     {
@@ -471,7 +471,7 @@ void robot_manager::on_desk_ready(ddz_robot* robot, command* command)
         task_timer* check_timer = this->queue_task(std::bind(&robot_manager::check_find_other_desk, this, robot), dooqu_service::util::random(20000, 40000), true);
         game_info->set_check_timer(check_timer);
 
-        std::cout << robot->id() << "in desk {" << game_info->get_desk_id() << "} and send RDY." << std::endl;
+        //std::cout << robot->id() << "in desk {" << game_info->get_desk_id() << "} and send RDY." << std::endl;
     }
 }
 

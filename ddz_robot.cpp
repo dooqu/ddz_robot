@@ -31,7 +31,6 @@ void ddz_robot::start_receive()
 void ddz_robot::logon()
 {
     this->write("LOG %s %s%c", this->game_id(), this->id(), NULL);
-    std::cout << "log" << std::endl;
 }
 
 void ddz_robot::fill(char* id, char* name, char* game_id)

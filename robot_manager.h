@@ -4,10 +4,7 @@
 
 #include <set>
 #include <thread>
-#include "service/command_dispatcher.h"
-#include "service/task_timer.h"
-#include "util/utility.h"
-#include "util/tick_count.h"
+#include "dooqu_service.h"
 #include "ddz_robot.h"
 #include "ddz_game_info.h"
 #include "poker_finder.h"
@@ -41,25 +38,25 @@ class robot_manager : public command_dispatcher, public async_task
         bool is_running;
 
         //
-        virtual void on_robot_logined(ddz_robot* robot, command* command);
+        void on_robot_logined(ddz_robot* robot, command* command);
         //
-        virtual void on_robot_in_desk(ddz_robot* robot, command* command);
+        void on_robot_in_desk(ddz_robot* robot, command* command);
 
 
-        virtual void on_desk_ready(ddz_robot* robot, command* command);
+        void on_desk_ready(ddz_robot* robot, command* command);
         //
-        virtual void on_desk_game_started(ddz_robot* robot, command* command);
+        void on_desk_game_started(ddz_robot* robot, command* command);
 
-        virtual void on_list_desk_client(ddz_robot* robot, command* command);
-
-
-        virtual void on_desk_bid(ddz_robot* robot, command* command);
-        virtual void on_desk_landlord(ddz_robot* robot, command* command);
+        void on_list_desk_client(ddz_robot* robot, command* command);
 
 
-        virtual void on_desk_poker_show(ddz_robot* robot, command* command);
-        virtual void on_desk_game_stoped(ddz_robot* robot, command* command);
-        virtual void on_robot_error(ddz_robot* robot, command* command);
+        void on_desk_bid(ddz_robot* robot, command* command);
+        void on_desk_landlord(ddz_robot* robot, command* command);
+
+
+        void on_desk_poker_show(ddz_robot* robot, command* command);
+        void on_desk_game_stoped(ddz_robot* robot, command* command);
+        void on_robot_error(ddz_robot* robot, command* command);
 
         void check_find_other_desk(ddz_robot* robot)
         {
@@ -83,7 +80,6 @@ class robot_manager : public command_dispatcher, public async_task
         //virtual void robot_manager::on_robot_error(ddz_robot* robot, command* command)
         */
 
-    private:
 };
 
 #endif // ROBOT_MANAGER_H
