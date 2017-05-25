@@ -90,6 +90,7 @@ robot_manager::robot_manager(io_service& ios) : work_(NULL), async_task(ios), is
 robot_manager::~robot_manager()
 {
     this->unregist_all_handles();
+
     this->offline_all_robots();
 
     for(robot_list::iterator e = this->robots_.begin(); e != this->robots_.end(); ++e)
@@ -97,6 +98,7 @@ robot_manager::~robot_manager()
         ddz_robot* robot = (*e);
         delete robot;
     }
+
 }
 
 
@@ -175,6 +177,8 @@ void robot_manager::update_robots()
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
     }
+
+    std::cout << "update thread exited." << std::endl;
 }
 
 void robot_manager::offline_all_robots()
@@ -184,18 +188,22 @@ void robot_manager::offline_all_robots()
 
     this->is_running = false;
 
+    delete this->work_;
+    this->work_ = NULL;
+
+    this->cancel_all_task();
+
     for(robot_list::iterator e = this->robots_.begin(); e != this->robots_.end(); ++e)
     {
         ddz_robot* robot = (*e);
         robot->tcp_client::disconnect();
     }
 
-    delete this->work_;
-    this->work_ = NULL;
+
 
     for(std::set<std::thread*>::iterator e = this->threads_.begin(); e != this->threads_.end(); ++e)
     {
-        printf("wait thread exit...\n");
+        std::cout << "wait for thread exit..." << std::endl;
         (*e)->join();
     }
 
@@ -208,14 +216,27 @@ void robot_manager::dispatch_bye(game_client* client)
 {
     std::cout << client->id() << "bye:" << client->error_code() << std::endl;
 
+    ddz_robot* robot = (ddz_robot*)client;
+
     if(is_running == false || client->error_code() == 17 || client->error_code() == 15 || client->error_code() == 12 || client->error_code() == 0)
     {
+        robot->set_available(false);
+        robot->set_command_dispatcher(NULL);
+        std::cout << "client exited." << std::endl;
         return;
     }
 
 
-    ddz_robot* robot = (ddz_robot*)client;
+
+    if(robot->error_code() == 2)
+    {
+        robot->print_send_buffer();
+    }
+
+    robot->set_available(false);
+    robot->set_command_dispatcher(NULL);
     robot->reset();
+
     boost::system::error_code code = robot->connect_to("127.0.0.1", 8000);
 
     if(!code)

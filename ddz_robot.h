@@ -53,7 +53,32 @@ class ddz_robot : public game_client
         void reset()
         {
             boost::system::error_code err_code;
+            this->t_socket.shutdown(boost::asio::socket_base::shutdown_both, err_code);
             this->t_socket.close(err_code);
+        }
+
+        void print_send_buffer()
+        {
+            __lock__(this->send_buffer_lock_, NULL);
+
+            std::cout << this->id() <<":" << "buffer-size:" <<this->send_buffer_sequence_.size() << std::endl;
+            std::cout << "recv:" << this->buffer << std::endl;
+            std::cout << "buffer_pos" << this->buffer_pos << std::endl;
+
+            this->buffer_pos = 0;
+            this->p_buffer = &this->buffer[0];
+
+//            for(int i = 0; i < this->send_buffer_sequence_.size(); i++)
+//            {
+//                buffer_stream* stream = this->send_buffer_sequence_.at(i);
+//
+//                for(int n = 0; n < stream->size(); n++)
+//                {
+//                    printf("%c", stream->at(n));
+//                }
+//
+//                printf("=%d\n", stream->size());
+//            }
         }
 
 

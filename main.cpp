@@ -24,9 +24,9 @@ int main()
         int g_robot_id = 0;
         int g_room_id = 0;
 
-        for(int room_index = 0; room_index < 60; ++room_index)
+        for(int room_index = 0; room_index <1; ++room_index)
         {
-            for(int i = 0; i < 300; i++)
+            for(int i = 0; i < 200; i++)
             {
                 sprintf(robot_id, "robot_%d", g_room_id++);
                 sprintf(room_id, "ddz_%d", room_index);
@@ -39,9 +39,12 @@ int main()
         manager.online_all_robots();
 
         cin.get();
+
+        manager.offline_all_robots();
+
+        ios.stop();
     }
 
-    cin.get();
 
     return 0;
 }
