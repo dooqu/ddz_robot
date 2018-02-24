@@ -77,7 +77,7 @@ robot_manager::robot_manager(io_service& ios) : work_(NULL), async_task(ios), is
     this->regist_handle("STT", make_handler(robot_manager::on_desk_game_started));
     this->regist_handle("BID", make_handler(robot_manager::on_desk_bid));
     this->regist_handle("LRD", make_handler(robot_manager::on_desk_landlord));
-    this->regist_handle("ERR", make_handler(robot_manager::on_robot_error));
+    //this->regist_handle("ERR", make_handler(robot_manager::on_robot_error));
 
     this->regist_handle("CAD", make_handler(robot_manager::on_desk_poker_show));
     this->regist_handle("STP", make_handler(robot_manager::on_desk_game_stoped));
@@ -90,25 +90,20 @@ robot_manager::robot_manager(io_service& ios) : work_(NULL), async_task(ios), is
 robot_manager::~robot_manager()
 {
     this->unregist_all_handles();
-
     this->offline_all_robots();
-
-    for(robot_list::iterator e = this->robots_.begin(); e != this->robots_.end(); ++e)
-    {
-        ddz_robot* robot = (*e);
-        delete robot;
-    }
-
+    this->robots_.clear();
+    std::cout << "~robot_manager" << std::endl;
 }
 
 
 void robot_manager::create_robot(io_service& ios, char* id, char* name, char* game_id)
 {
     ddz_robot* robot = new ddz_robot(ios);
+    std::shared_ptr<ws_session<tcp_stream>> new_robot(robot);
     ddz_game_info* game_info = new ddz_game_info();
     robot->set_game_info(game_info);
     robot->fill(id, name, game_id);
-    this->robots_.insert(robot);
+    this->robots_.insert(new_robot);
 }
 
 
@@ -120,37 +115,20 @@ void robot_manager::online_all_robots()
     if(this->work_ != NULL)
         return;
 
-    this->work_ = new boost::asio::io_service::work(this->io_service_);
+    this->work_ = new boost::asio::io_service::work(this->task_io_service_);
 
     for(int i = 0; i < 5;i ++)
     {
-        std::thread* t = new thread(std::bind(static_cast<size_t(io_service::*)()>(&io_service::run), &this->io_service_));
+        std::thread* t = new thread(std::bind(static_cast<size_t(io_service::*)()>(&io_service::run), &this->task_io_service_));
         this->threads_.insert(t);
+        service_status::instance()->init(t->get_id());
     }
 
-    for(robot_list::iterator e = this->robots_.begin(); e != this->robots_.end(); ++e)
-    {
-        ddz_robot* robot = (*e);
-        boost::system::error_code code = robot->connect_to("127.0.0.1", 8000);
-
-        if(!code)
-        {
-            robot->set_available(true);
-            robot->set_command_dispatcher(this);
-            robot->start_receive();
-            robot->logon();
-        }
-        else
-        {
-            std::cout << "can not connect to server:" << code.message() << std::endl;
-        }
-    }
-
+    robot_list::iterator e = this->robots_.begin();
+    online_this_robot(e);
     this->is_running = true;
-
-    std::thread t(std::bind(&robot_manager::update_robots, this));
-    t.detach();
 }
+
 
 void robot_manager::update_robots()
 {
@@ -164,11 +142,9 @@ void robot_manager::update_robots()
 
             for(robot_list::iterator e = this->robots_.begin(); e != this->robots_.end(); ++e)
             {
-                ddz_robot* robot = (*e);
-
-                if(robot->tick_count() >= 20 * 1000)
+                if((*e)->actived_time_elapsed() >= 20 * 1000)
                 {
-                    robot->write("PNG%c", NULL);
+                    (*e)->write_frame(true, dooqu_service::basic::ws_framedata::opcode::TEXT, "PNG%c", NULL);
                 }
             }
         }
@@ -177,8 +153,6 @@ void robot_manager::update_robots()
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
     }
-
-    std::cout << "update thread exited." << std::endl;
 }
 
 void robot_manager::offline_all_robots()
@@ -193,12 +167,14 @@ void robot_manager::offline_all_robots()
 
     this->cancel_all_task();
 
-    for(robot_list::iterator e = this->robots_.begin(); e != this->robots_.end(); ++e)
     {
-        ddz_robot* robot = (*e);
-        robot->tcp_client::disconnect();
+        ___lock___(this->robot_list_mutex_, "robot_manager.offline_all_robots");
+        for(robot_list::iterator e = this->robots_.begin(); e != this->robots_.end(); ++e)
+        {
+            ddz_robot* robot = (ddz_robot*)(*e).get();
+            robot->reset();
+        }
     }
-
 
 
     for(std::set<std::thread*>::iterator e = this->threads_.begin(); e != this->threads_.end(); ++e)
@@ -207,50 +183,17 @@ void robot_manager::offline_all_robots()
         (*e)->join();
     }
 
-    printf("offline_ok\n");
+    this->task_io_service_.stop();
 
-    this->io_service_.stop();
+    printf("all robots offlined.\n");
 }
 
-void robot_manager::dispatch_bye(game_client* client)
+void robot_manager::dispatch_bye(ws_client* client)
 {
-    std::cout << client->id() << "bye:" << client->error_code() << std::endl;
-
     ddz_robot* robot = (ddz_robot*)client;
-
-    if(is_running == false || client->error_code() == 17 || client->error_code() == 15 || client->error_code() == 12 || client->error_code() == 0)
-    {
-        robot->set_available(false);
-        robot->set_command_dispatcher(NULL);
-        std::cout << "client exited." << std::endl;
-        return;
-    }
-
-
-
-    if(robot->error_code() == 2)
-    {
-        robot->print_send_buffer();
-    }
-
     robot->set_available(false);
-    robot->set_command_dispatcher(NULL);
-    robot->reset();
-
-    boost::system::error_code code = robot->connect_to("127.0.0.1", 8000);
-
-    if(!code)
-    {
-        robot->set_available(true);
-        robot->set_command_dispatcher(this);
-        robot->start_receive();
-        robot->logon();
-        robot->update_tick();
-    }
-    else
-    {
-        std::cout << "can not connect to server:" << code.message() << std::endl;
-    }
+    ___lock___(this->robot_list_mutex_, "robot_manager.dispatch_bye");
+    this->robots_.erase(robot->shared_from_this());
 }
 
 
@@ -426,8 +369,8 @@ LABEL_DEFAULT :
         }
 
         //std::cout << buffer << std::endl;
-        //printf("\n%s发送牌型:{%s}\n", robot->id(), buffer);
-        robot->write("CAD %s%c", buffer, NULL);
+       // printf("\n%s发送牌型:{%s}\n", robot->id(), buffer);
+        robot->write_frame(true, ws_framedata::opcode::TEXT, "CAD %s%c", buffer, NULL);
     }
     else
     {
@@ -438,39 +381,36 @@ LABEL_DEFAULT :
            // printf("error");
         }
 
-        //printf("\n%s发送牌型:{不要}", this->robot_name());
-        robot->write("CAD 0%c", NULL);
+        //printf("\n%s发送牌型:{不要}", robot->id());
+        robot->write_frame(true, dooqu_service::basic::ws_framedata::opcode::TEXT, "CAD 0%c", NULL);
     }
 
-    robot->update_tick();
+    //robot->update_tick();
 }
 
 
 void robot_manager::on_robot_logined(ddz_robot* robot, command* command)
 {
-    this->queue_task(std::bind(static_cast<void(ddz_robot::*)(const char*, ...)>(&ddz_robot::write), robot, "IDK%c", NULL), dooqu_service::util::random(1000, 3000));
-    robot->update_tick();
+    this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "IDK%c", NULL), dooqu_service::util::random(1000, 3000));
+   // robot->update_tick();
 }
 
 
 void robot_manager::on_robot_in_desk(ddz_robot* robot, command* command)
 {
     int desk_index = std::atoi(command->params(0));
-
     if (desk_index >= 0)
     {
         ddz_game_info* game_info = robot->get_game_info<ddz_game_info>();
         game_info->set_desk_id(desk_index);
-        this->queue_task(std::bind(static_cast<void(ddz_robot::*)(const char*, ...)>(&ddz_robot::write), robot, "RDY%c", NULL), dooqu_service::util::random(1000, 3030));
-
-        //std::cout << robot->id() << "in desk {" << desk_index << "}" << std::endl;
+        game_info->set_pos_index(std::atoi(command->params(1)));
+        this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT,  "RDY%c", NULL), dooqu_service::util::random(1000, 3030));
     }
     else
     {
-         this->queue_task(std::bind(static_cast<void(ddz_robot::*)(const char*, ...)>(&ddz_robot::write), robot, "IDK%c", NULL), dooqu_service::util::random(1000, 3000));
+         this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "IDK%c", NULL), dooqu_service::util::random(1000, 3000));
     }
-
-    robot->update_tick();
+    //robot->update_tick();
 }
 
 void robot_manager::on_list_desk_client(ddz_robot* robot, command* command)
@@ -478,8 +418,8 @@ void robot_manager::on_list_desk_client(ddz_robot* robot, command* command)
     //如果当前的lsd是当前的机器人，记住该机器人的位置索引
     if (std::strcmp(command->params(0), robot->id()) == 0)
     {
-        ddz_game_info* game_info = robot->get_game_info<ddz_game_info>();
-        game_info->set_pos_index(std::atoi(command->params(2)));
+        //ddz_game_info* game_info = robot->get_game_info<ddz_game_info>();
+       // game_info->set_pos_index(std::atoi(command->params(2)));
     }
 }
 
@@ -491,8 +431,6 @@ void robot_manager::on_desk_ready(ddz_robot* robot, command* command)
 
         task_timer* check_timer = this->queue_task(std::bind(&robot_manager::check_find_other_desk, this, robot), dooqu_service::util::random(20000, 40000), true);
         game_info->set_check_timer(check_timer);
-
-        //std::cout << robot->id() << "in desk {" << game_info->get_desk_id() << "} and send RDY." << std::endl;
     }
 }
 
@@ -518,7 +456,6 @@ void robot_manager::on_desk_game_started(ddz_robot* robot, command* command)
     for (int i = 0; i < command->param_size(); ++i)
     {
         poker_list::iterator finder = this->poker_values.find(command->params(i));
-
         if (finder != this->poker_values.end())
         {
             game_info->get_pokers()->insert(*finder);
@@ -534,8 +471,8 @@ void robot_manager::on_desk_game_started(ddz_robot* robot, command* command)
 
         if (r < 3)
         {
-            this->queue_task(std::bind(static_cast<void(ddz_robot::*)(const char*, ...)>(&ddz_robot::write), robot, "DLA%c", NULL), dooqu_service::util::random(1000, 2000));
-            robot->update_tick();
+            this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "DLA%c", NULL), dooqu_service::util::random(1000, 2000));
+            //robot->update_tick();
         }
     }
 }
@@ -543,14 +480,14 @@ void robot_manager::on_desk_game_started(ddz_robot* robot, command* command)
 
 void robot_manager::on_desk_bid(ddz_robot* robot, command* command)
 {
-    int bid_index = std::atoi(command->params(0));
-
     ddz_game_info* game_info = robot->get_game_info<ddz_game_info>();
-
+    int bid_index = std::atoi(command->params(0));
     if (game_info->get_pos_index() == bid_index)
     {
-        this->queue_task(std::bind(static_cast<void(ddz_robot::*)(const char*, ...)>(&ddz_robot::write), robot, "BID %s%c", (dooqu_service::util::random(0, 2) == 0)? "0" : "1", NULL), dooqu_service::util::random(1000, 2200));
-        robot->update_tick();
+        std::cout << "该我叫地主啦，我的位置是:" << game_info->get_pos_index() << std::endl;
+        this->queue_task(std::bind(&ddz_robot::write_frame, robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "BID %c%c", (dooqu_service::util::random(0, 5) == 0)? '0' : '1', NULL), 
+        dooqu_service::util::random(1000, 2200));
+        //robot->update_tick();
     }
 }
 
@@ -562,10 +499,9 @@ void robot_manager::on_desk_landlord(ddz_robot* robot, command* command)
     ddz_game_info* game_info = robot->get_game_info<ddz_game_info>();
     game_info->set_curr_landlord_index(pos_index);
 
-
-
     if (game_info->get_pos_index() == pos_index)
     {
+        std::cout << "我是地主啦:" << game_info->get_pos_index() << std::endl;
         //底牌加到牌面列表中
         for (int i = 1; i < command->param_size(); i++)
         {
@@ -663,28 +599,30 @@ void robot_manager::on_desk_game_stoped(ddz_robot* robot, command* command)
     if(r == 1)
     {
         //如果r==1，那么换一桌
-        this->queue_task(std::bind(static_cast<void(ddz_robot::*)(const char*, ...)>(&ddz_robot::write), robot, "IDK%c", NULL), sleepMilli);
+        this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "IDK%c", NULL), sleepMilli);
     }
     else
     {
         //如果r != 1，那么直接准备下一局
-        this->queue_task(std::bind(static_cast<void(ddz_robot::*)(const char*, ...)>(&ddz_robot::write), robot, "RDY%c", NULL), sleepMilli);
+        this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "RDY%c", NULL), sleepMilli);
     }
 
-    robot->update_tick();
+    //robot->update_tick();
     //延时决定是否要离开或者继续在此桌游戏
    // this->queue_task(robot, &ddz_robot::ready_or_next_desk, NULL, NULL, 0, random(2000, 3000));
 
 }
 
+/*
 void robot_manager::on_robot_error(ddz_robot* robot, command* command)
 {
-    int error_code = 0;
+    unsigned short error_code = 0;
 
     if(command->param_size() == 1)
     {
-        error_code = std::atoi(command->params(0));
+        error_code = (unsigned short)std::atoi(command->params(0));
     }
 
-    robot->set_error_code(error_code);
+    ((game_session<tcp_stream>*)robot)->set_error_code(error_code);
 }
+*/

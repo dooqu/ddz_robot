@@ -4,14 +4,14 @@
 #include "boost/asio.hpp"
 #include "robot_manager.h"
 
-
 using namespace std;
-
-
 
 int main()
 {
     srand(time(NULL));
+
+    service_status::create_new();
+    service_status::instance()->init(std::this_thread::get_id());
 
     {
         boost::asio::io_service ios;
@@ -24,9 +24,9 @@ int main()
         int g_robot_id = 0;
         int g_room_id = 0;
 
-        for(int room_index = 0; room_index <1; ++room_index)
+        for(int room_index = 0; room_index < 1; ++room_index)
         {
-            for(int i = 0; i < 200; i++)
+            for(int i = 0; i < 297; i++)
             {
                 sprintf(robot_id, "robot_%d", g_room_id++);
                 sprintf(room_id, "ddz_%d", room_index);

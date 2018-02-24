@@ -1,0 +1,53 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build ddz_robot",
+            "type": "shell",
+            "command": "g++",
+            "args": [
+                "-g",
+                "-fPIC",
+                "-Wall",
+                "-fpermissive",
+                "-std=c++11",
+                "-DDDZ_ROBOT",
+                "${workspaceFolder}/*.cpp",
+                "-I/usr/local/ssl/include",
+                "-I/home/jack/cpp_proj/dooqu_service_ssl/src",
+                "-I/home/jack/cpp_proj/dooqu_ddz/src",
+                "-L/home/jack/cpp_proj/dooqu_service_ssl/bin/Debug",
+                "-L/home/jack/cpp_proj/dooqu_ddz/bin/Debug",
+                "-o ${workspaceFolder}/bin/Debug/ddz_robot",
+                "-l:libdooqu_service_ssl.a",
+                "-ldooqu_ddz",
+                "-pthread",
+                "-ldl",
+                "-Wl,-rpath,./"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true 
+            },
+            "presentation": {
+                // Reveal the output only if unrecognized errors occur.
+                "reveal": "silent"
+            },
+            // Use the standard MS compiler pattern to detect errors, warnings and infos
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": ["relative", "${workspaceRoot}"],
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):(\\d+):\\s+(error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
+        }
+    ]
+}

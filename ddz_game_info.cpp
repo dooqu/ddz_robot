@@ -11,7 +11,6 @@ ddz_game_info::~ddz_game_info()
     {
 
     }
-    printf("ddz_game_info2\n");
 }
 
 

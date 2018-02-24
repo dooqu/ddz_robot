@@ -32,6 +32,7 @@ class ddz_game_info : public game_info
 
         void set_pos_index(int pos_index)
         {
+            std::cout << "set_pos_index:" << pos_index << std::endl;
             this->pos_index_ = pos_index;
         }
 
@@ -77,12 +78,12 @@ class ddz_game_info : public game_info
             this->curr_landlord_index_ = index;
         }
 
-        task_timer* get_check_timer()
+        async_task::task_timer* get_check_timer()
         {
             return this->check_timer_;
         }
 
-        void set_check_timer(task_timer* timer)
+        void set_check_timer(async_task::task_timer* timer)
         {
             this->check_timer_ = timer;
         }
@@ -107,7 +108,7 @@ class ddz_game_info : public game_info
         ddz_robot* curr_poker_shower_;
         int curr_poker_shower_index_;
         int curr_landlord_index_;
-        task_timer* check_timer_;
+        async_task::task_timer* check_timer_;
         bool is_game_started_;
 
     private:
