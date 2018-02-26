@@ -24,7 +24,7 @@ int main()
         int g_robot_id = 0;
         int g_room_id = 0;
 
-        for(int room_index = 0; room_index < 1; ++room_index)
+        for(int room_index = 0; room_index < 6; ++room_index)
         {
             for(int i = 0; i < 297; i++)
             {
@@ -33,9 +33,7 @@ int main()
                 manager.create_robot(ios, robot_id, robot_id, room_id);
             }
         }
-
         std::cout << "all robot created" << std::endl;
-
         manager.online_all_robots();
 
         cin.get();
@@ -44,7 +42,6 @@ int main()
 
         ios.stop();
     }
-
 
     return 0;
 }

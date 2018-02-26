@@ -125,7 +125,28 @@ void robot_manager::online_all_robots()
     }
 
     robot_list::iterator e = this->robots_.begin();
-    online_this_robot(e);
+    while (e != this->robots_.end())
+    {
+        std::shared_ptr<ws_session<tcp_stream>> ws_session_ptr = (*e);
+        ddz_robot* robot = (ddz_robot*)(ws_session_ptr.get());
+        robot->set_command_dispatcher(this);   
+
+        std::cout << "do robot connect:" << robot->id() << std::endl;
+        boost::system::error_code err;     
+        robot->socket().connect(boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 8000), err);
+        if(!err)
+        {            
+            std::cout << "robot:" << robot->id() << " connected." << std::endl;
+            robot->set_available(true);
+            robot->start_handshake();
+        }
+        else
+        {
+            std::cout << "robot:" << robot->id() << " failed." << err.message() << std::endl;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        ++e;
+    }
     this->is_running = true;
 }
 
@@ -161,12 +182,9 @@ void robot_manager::offline_all_robots()
         return;
 
     this->is_running = false;
-
     delete this->work_;
     this->work_ = NULL;
-
     this->cancel_all_task();
-
     {
         ___lock___(this->robot_list_mutex_, "robot_manager.offline_all_robots");
         for(robot_list::iterator e = this->robots_.begin(); e != this->robots_.end(); ++e)
@@ -175,16 +193,12 @@ void robot_manager::offline_all_robots()
             robot->reset();
         }
     }
-
-
     for(std::set<std::thread*>::iterator e = this->threads_.begin(); e != this->threads_.end(); ++e)
     {
         std::cout << "wait for thread exit..." << std::endl;
         (*e)->join();
     }
-
     this->task_io_service_.stop();
-
     printf("all robots offlined.\n");
 }
 
@@ -192,6 +206,7 @@ void robot_manager::dispatch_bye(ws_client* client)
 {
     ddz_robot* robot = (ddz_robot*)client;
     robot->set_available(false);
+    robot->set_command_dispatcher(NULL);
     ___lock___(this->robot_list_mutex_, "robot_manager.dispatch_bye");
     this->robots_.erase(robot->shared_from_this());
 }
@@ -391,24 +406,37 @@ LABEL_DEFAULT :
 
 void robot_manager::on_robot_logined(ddz_robot* robot, command* command)
 {
-    this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "IDK%c", NULL), dooqu_service::util::random(1000, 3000));
-   // robot->update_tick();
+    std::shared_ptr<ddz_robot> robot_ptr = robot->get_robot_ptr();
+    this->queue_task([robot_ptr]()
+    {
+        robot_ptr->write_frame(true, dooqu_service::basic::ws_framedata::opcode::TEXT, "IDK%c", NULL);
+    }, 
+    dooqu_service::util::random(1000, 3000));
 }
 
 
 void robot_manager::on_robot_in_desk(ddz_robot* robot, command* command)
 {
+    std::shared_ptr<ddz_robot> robot_ptr = robot->get_robot_ptr();
     int desk_index = std::atoi(command->params(0));
     if (desk_index >= 0)
     {
         ddz_game_info* game_info = robot->get_game_info<ddz_game_info>();
         game_info->set_desk_id(desk_index);
         game_info->set_pos_index(std::atoi(command->params(1)));
-        this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT,  "RDY%c", NULL), dooqu_service::util::random(1000, 3030));
+        this->queue_task([robot_ptr]()
+        {
+            robot_ptr->write_frame(true, dooqu_service::basic::ws_framedata::opcode::TEXT,  "RDY%c", NULL);
+        }, 
+        dooqu_service::util::random(1000, 3030));
     }
     else
     {
-         this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "IDK%c", NULL), dooqu_service::util::random(1000, 3000));
+        this->queue_task([robot_ptr]()
+        {
+            robot_ptr->write_frame(true, dooqu_service::basic::ws_framedata::opcode::TEXT,  "IDK%c", NULL);
+        }, 
+        dooqu_service::util::random(1000, 3030));
     }
     //robot->update_tick();
 }
@@ -426,10 +454,18 @@ void robot_manager::on_list_desk_client(ddz_robot* robot, command* command)
 void robot_manager::on_desk_ready(ddz_robot* robot, command* command)
 {
     if (std::strcmp(command->params(0), robot->id()) == 0)
-    {
+    {        
         ddz_game_info* game_info = robot->get_game_info<ddz_game_info>();
-
-        task_timer* check_timer = this->queue_task(std::bind(&robot_manager::check_find_other_desk, this, robot), dooqu_service::util::random(20000, 40000), true);
+        std::shared_ptr<ddz_robot> robot_ptr = robot->get_robot_ptr();
+        //task_timer* check_timer = this->queue_task(std::bind(&robot_manager::check_find_other_desk, this, robot), dooqu_service::util::random(20000, 40000), true);
+        task_timer* check_timer = this->queue_task([robot_ptr, this, robot]()
+        {
+            if(robot_ptr->is_availabled())
+            {
+                this->check_find_other_desk(robot);
+            }            
+        }, 
+        dooqu_service::util::random(20000, 40000), true);
         game_info->set_check_timer(check_timer);
     }
 }
@@ -438,7 +474,6 @@ void robot_manager::on_desk_ready(ddz_robot* robot, command* command)
 void robot_manager::on_desk_game_started(ddz_robot* robot, command* command)
 {
     ddz_game_info* game_info = robot->get_game_info<ddz_game_info>();
-
     game_info->set_game_started(true);
 
     //检查空卓的定时器取消
@@ -471,8 +506,12 @@ void robot_manager::on_desk_game_started(ddz_robot* robot, command* command)
 
         if (r < 3)
         {
-            this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "DLA%c", NULL), dooqu_service::util::random(1000, 2000));
-            //robot->update_tick();
+            std::shared_ptr<ddz_robot> robot_ptr = robot->get_robot_ptr();
+            this->queue_task([robot_ptr]()
+            {
+                robot_ptr->write_frame(true, dooqu_service::basic::ws_framedata::opcode::TEXT, "DLA%c", NULL);
+            }, 
+            dooqu_service::util::random(1000, 2000));
         }
     }
 }
@@ -484,10 +523,12 @@ void robot_manager::on_desk_bid(ddz_robot* robot, command* command)
     int bid_index = std::atoi(command->params(0));
     if (game_info->get_pos_index() == bid_index)
     {
-        std::cout << "该我叫地主啦，我的位置是:" << game_info->get_pos_index() << std::endl;
-        this->queue_task(std::bind(&ddz_robot::write_frame, robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "BID %c%c", (dooqu_service::util::random(0, 5) == 0)? '0' : '1', NULL), 
+        std::shared_ptr<ddz_robot> robot_ptr = robot->get_robot_ptr();
+        this->queue_task([robot_ptr]()
+        {
+            robot_ptr->write_frame(true, dooqu_service::basic::ws_framedata::opcode::TEXT, "BID %c%c", (dooqu_service::util::random(0, 5) == 0)? '0' : '1', NULL);
+        },
         dooqu_service::util::random(1000, 2200));
-        //robot->update_tick();
     }
 }
 
@@ -501,7 +542,7 @@ void robot_manager::on_desk_landlord(ddz_robot* robot, command* command)
 
     if (game_info->get_pos_index() == pos_index)
     {
-        std::cout << "我是地主啦:" << game_info->get_pos_index() << std::endl;
+        //std::cout << "我是地主啦:" << game_info->get_pos_index() << std::endl;
         //底牌加到牌面列表中
         for (int i = 1; i < command->param_size(); i++)
         {
@@ -512,8 +553,15 @@ void robot_manager::on_desk_landlord(ddz_robot* robot, command* command)
                 game_info->get_pokers()->insert(*finder);
             }
         }
-
-        this->queue_task(std::bind(&robot_manager::show_robot_pokers, this, robot), random(2000, 3000));
+        std::shared_ptr<ddz_robot> robot_ptr = robot->get_robot_ptr();
+        this->queue_task([robot_ptr, this, robot]()
+        {
+            if(robot_ptr->is_availabled())
+            {
+                this->show_robot_pokers(robot);
+            }            
+        }, 
+        random(2000, 3000));
     }
 }
 
@@ -577,7 +625,16 @@ void robot_manager::on_desk_poker_show(ddz_robot* robot, command* command)
                 game_info->set_curr_poker_info(p);
             }
 
-            this->queue_task(std::bind(&robot_manager::show_robot_pokers, this, robot), random(1000, 3000));
+            //this->queue_task(std::bind(&robot_manager::show_robot_pokers, this, robot), random(1000, 3000));
+            std::shared_ptr<ddz_robot> robot_ptr = robot->get_robot_ptr();
+            this->queue_task([robot_ptr, this, robot]()
+            {
+                if(robot_ptr->is_availabled())
+                {
+                    this->show_robot_pokers(robot);
+                }                
+            }, 
+            random(2000, 3000));
         }
     }
 }
@@ -596,15 +653,26 @@ void robot_manager::on_desk_game_stoped(ddz_robot* robot, command* command)
     int r = random(0, 3);
     int sleepMilli = random(2000, 5000);
 
+    std::shared_ptr<ddz_robot> robot_ptr = robot->get_robot_ptr();
     if(r == 1)
     {
         //如果r==1，那么换一桌
-        this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "IDK%c", NULL), sleepMilli);
+        this->queue_task([robot_ptr]()
+        {
+            robot_ptr->write_frame(true, dooqu_service::basic::ws_framedata::opcode::TEXT, "IDK%c", NULL);
+        }, 
+        sleepMilli);
+        //this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "IDK%c", NULL), sleepMilli);
     }
     else
     {
         //如果r != 1，那么直接准备下一局
-        this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "RDY%c", NULL), sleepMilli);
+        this->queue_task([robot_ptr]()
+        {
+            robot_ptr->write_frame(true, dooqu_service::basic::ws_framedata::opcode::TEXT, "RDY%c", NULL);
+        }, 
+        sleepMilli);
+        //this->queue_task(std::bind((&ddz_robot::write_frame), robot, true, dooqu_service::basic::ws_framedata::opcode::TEXT, "RDY%c", NULL), sleepMilli);
     }
 
     //robot->update_tick();
@@ -613,16 +681,3 @@ void robot_manager::on_desk_game_stoped(ddz_robot* robot, command* command)
 
 }
 
-/*
-void robot_manager::on_robot_error(ddz_robot* robot, command* command)
-{
-    unsigned short error_code = 0;
-
-    if(command->param_size() == 1)
-    {
-        error_code = (unsigned short)std::atoi(command->params(0));
-    }
-
-    ((game_session<tcp_stream>*)robot)->set_error_code(error_code);
-}
-*/

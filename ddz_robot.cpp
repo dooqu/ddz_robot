@@ -12,26 +12,6 @@ ddz_robot::~ddz_robot()
     this->game_info_ = NULL;
 }
 
-void ddz_robot::connect_server(const char* ip_address, int port, std::function<void(void)> callback)
-{
-    std::cout << "connecting..." << std::endl;
-    std::shared_ptr<ddz_robot> self = this->get_robot_ptr();
-    this->socket().async_connect(boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string(ip_address), port), [this, self, callback](const boost::system::error_code& error)
-    {
-        std::cout << "server connected." << std::endl;
-        if(!error)
-        {
-            this->set_available(true);
-            this->start_handshake();
-        }
-        else
-        {
-            std::cout << "connecion failed." << std::endl;
-        }
-
-        callback();
-    });
-}
 
 void ddz_robot::start_handshake()
 {
@@ -45,18 +25,19 @@ void ddz_robot::start_receive_handshake_resp()
     std::shared_ptr<ddz_robot> self = this->get_robot_ptr();
     string s = "\r\n\r\n";
 
-
-    boost::asio::async_read_until(this->socket(), buf_, "\r\n\r\n",[self, this](const boost::system::error_code& error, std::size_t size){
-        if(!error)
+    boost::asio::async_read_until(this->socket(), buf_, "\r\n\r\n",
+        [self, this](const boost::system::error_code& error, std::size_t size)
         {
-            this->read_from_client();
-            this->write_frame(true, dooqu_service::basic::ws_framedata::opcode::TEXT, "LOG ddz_0 %s%c", this->id(), NULL);
-        }
-        else
-        {
-            std::cout << "error" << std::endl;
-        }
-    } 
+            if(!error)
+            {
+                this->read_from_client();
+                this->write_frame(true, dooqu_service::basic::ws_framedata::opcode::TEXT, "LOG %s %s%c", this->game_id(), this->id(), NULL);
+            }
+            else
+            {
+                std::cout << "error" << std::endl;
+            }
+        } 
     );
 }
 

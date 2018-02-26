@@ -37,12 +37,19 @@ class ddz_robot : public dooqu_service::service::game_session<tcp_stream>
             return std::dynamic_pointer_cast<ddz_robot>(this->shared_from_this());
         }
 
+        void start_ws()
+        {
+            this->start_handshake();
+        }
+
+        void start_handshake();
+
     protected:
         char game_id_[32];
 
         void show_pokers();
 
-        void start_handshake();
+        
 
         void start_receive_handshake_resp();
 

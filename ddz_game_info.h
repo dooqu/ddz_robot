@@ -32,7 +32,6 @@ class ddz_game_info : public game_info
 
         void set_pos_index(int pos_index)
         {
-            std::cout << "set_pos_index:" << pos_index << std::endl;
             this->pos_index_ = pos_index;
         }
 
