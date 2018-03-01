@@ -23,5 +23,22 @@
             }
         ]
     }
+    ,
+    {
+        "name": "attach robot",
+        "type": "cppdbg",
+       "request": "attach",
+        "program": "${workspaceFolder}/bin/Debug/ddz_robot",
+        "processId": "${command:pickProcess}",
+        "linux": {
+            "MIMode": "gdb"
+        },
+        "osx": {
+            "MIMode": "lldb"
+        },
+        "windows": {
+            "MIMode": "gdb"
+        }
+    }
     ]
 }

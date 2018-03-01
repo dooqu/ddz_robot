@@ -36,7 +36,6 @@ class robot_manager : public command_dispatcher, public async_task
         void dispatch_bye(ws_client*);
         void show_robot_pokers(ddz_robot* robot);
         poker_list poker_values;
-        void update_robots();
         bool is_running;
         std::recursive_mutex online_mutex_;
         int curr_onlines = 0;
@@ -77,34 +76,10 @@ class robot_manager : public command_dispatcher, public async_task
             game_info->set_check_timer(NULL);
         }
 
-        void online_this_robot(robot_list::iterator e)
+        bool can_do()
         {
-            curr_onlines ++;
-            ws_session<tcp_stream>* ws_session = (*e).get();
-            ddz_robot* robot = (ddz_robot*)ws_session;
-            robot->set_command_dispatcher(this);
-            robot->connect_server("127.0.0.1", 8000, [this, e]()
-            {
-                curr_onlines--;
-
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-                if(++e != this->robots_.end())
-                {
-                    this->online_this_robot(e);
-                }
-            });
+            return this->is_running;
         }
-
-        
-
-        /*
-        virtual void on_desk_poker_refuse(ddz_robot* robot, command* command);
-
-        virtual void on_not_client_card(ddz_robot* robot, command* command);
-        //virtual void robot_manager::on_robot_error(ddz_robot* robot, command* command)
-        */
-
 };
 
 #endif // ROBOT_MANAGER_H

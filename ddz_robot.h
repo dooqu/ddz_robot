@@ -44,16 +44,13 @@ class ddz_robot : public dooqu_service::service::game_session<tcp_stream>
 
         void start_handshake();
 
+        int index;
+
     protected:
         char game_id_[32];
-
         void show_pokers();
-
-        
-
-        void start_receive_handshake_resp();
-
         boost::asio::streambuf buf_;
+        void receive_handshake_resp();
 
     private:
 };

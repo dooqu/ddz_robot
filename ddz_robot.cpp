@@ -17,25 +17,25 @@ void ddz_robot::start_handshake()
 {
     char* buffer = "GET / HTTP/1.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nHost: service.wechat.dooqu.com\r\nSec-WebSocket-Origin: https://service.wechat.dooqu.com\r\nSec-WebSocket-Key: 2SCVXUeP9cTjV+0mWB8J6A==\r\nSec-WebSocket-Version: 13\r\n\r\n";
     this->write(buffer);
-    this->start_receive_handshake_resp();
+    this->receive_handshake_resp();
 }
 
-void ddz_robot::start_receive_handshake_resp()
-{
-    std::shared_ptr<ddz_robot> self = this->get_robot_ptr();
-    string s = "\r\n\r\n";
 
+void ddz_robot::receive_handshake_resp()
+{
+    std::shared_ptr<ws_session<tcp_stream>> self = this->shared_from_this();
+    
     boost::asio::async_read_until(this->socket(), buf_, "\r\n\r\n",
         [self, this](const boost::system::error_code& error, std::size_t size)
         {
             if(!error)
             {
-                this->read_from_client();
                 this->write_frame(true, dooqu_service::basic::ws_framedata::opcode::TEXT, "LOG %s %s%c", this->game_id(), this->id(), NULL);
+                this->read_from_client();
             }
             else
             {
-                std::cout << "error" << std::endl;
+                std::cout << "receive handshake error." << std::endl;
             }
         } 
     );
