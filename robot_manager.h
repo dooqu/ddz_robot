@@ -45,21 +45,19 @@ class robot_manager : public command_dispatcher, public async_task
         //
         void on_robot_in_desk(ddz_robot* robot, command* command);
 
-
         void on_desk_ready(ddz_robot* robot, command* command);
         //
         void on_desk_game_started(ddz_robot* robot, command* command);
 
         void on_list_desk_client(ddz_robot* robot, command* command);
 
-
         void on_desk_bid(ddz_robot* robot, command* command);
+
         void on_desk_landlord(ddz_robot* robot, command* command);
 
-
         void on_desk_poker_show(ddz_robot* robot, command* command);
+
         void on_desk_game_stoped(ddz_robot* robot, command* command);
-        //void on_robot_error(ddz_robot* robot, command* command);
 
         void check_find_other_desk(ddz_robot* robot)
         {
@@ -68,7 +66,7 @@ class robot_manager : public command_dispatcher, public async_task
             if(game_info == NULL)
                 return;
 
-            if(robot->is_availabled() && game_info->is_game_started() == false)
+            if(robot->is_available() && game_info->is_game_started() == false)
             {
                 robot->write_frame(true, dooqu_service::basic::ws_framedata::opcode::TEXT, "IDK%c", NULL);
                 std::cout << robot->id() << "检查超时，发送idk" << std::endl;
@@ -76,8 +74,9 @@ class robot_manager : public command_dispatcher, public async_task
             game_info->set_check_timer(NULL);
         }
 
-        bool can_do()
+        bool can_async_task_callback()
         {
+            std::cout << "can_async_task_callback:" << this->is_running << std::endl;
             return this->is_running;
         }
 };

@@ -114,6 +114,8 @@ void robot_manager::online_all_robots()
     if(this->is_running == true || this->work_ != NULL)
         return;
 
+    this->is_running = true;
+
     this->work_ = new boost::asio::io_service::work(this->task_io_service_);
 
     for(int i = 0; i < 5;i ++)
@@ -124,16 +126,13 @@ void robot_manager::online_all_robots()
     }
 
     std::vector<ddz_robot*> all_robots;
-
     robot_list::iterator e = this->robots_.begin();
     while (e != this->robots_.end())
     {
         std::shared_ptr<ws_session<tcp_stream>> ws_session_ptr = (*e);
         ws_session<tcp_stream>* ws_session = ws_session_ptr.get();
         ddz_robot* robot = dynamic_cast<ddz_robot*>(ws_session);
-       // all_robots.push_back(robot);
-               robot->set_command_dispatcher(this);
-        std::cout << "do robot connect:" << robot->id() << "," << robot->index << std::endl;
+        robot->set_command_dispatcher(this);
         boost::system::error_code err;
         robot->socket().connect(boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 8000), err);
         if(!err)
@@ -146,30 +145,9 @@ void robot_manager::online_all_robots()
         {
             std::cout << "robot:" << robot->id() << " failed, reason:" << err.message() << std::endl;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
         ++e;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));        
     }
-
-    // for(int i = 0; i < all_robots.size(); i++)
-    // {
-    //     ddz_robot* robot = all_robots.at(i);
-    //     robot->set_command_dispatcher(this);
-    //     std::cout << "do robot connect:" << robot->id() << "," << robot->index << std::endl;
-    //     boost::system::error_code err;
-    //     robot->socket().connect(boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 8000), err);
-    //     if(!err)
-    //     {            
-    //         std::cout << "robot:" << robot->id() << " connected." << std::endl;
-    //         robot->set_available(true);
-    //         robot->start_handshake();
-    //     }
-    //     else
-    //     {
-    //         std::cout << "robot:" << robot->id() << " failed, reason:" << err.message() << std::endl;
-    //     }
-    //     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    // }
-    this->is_running = true;
 }
 
 
@@ -178,7 +156,6 @@ void robot_manager::offline_all_robots()
     if(this->is_running == false)
         return;
     this->is_running = false;
-
     delete this->work_;
     this->work_ = NULL;
     this->cancel_all_task();
@@ -190,7 +167,6 @@ void robot_manager::offline_all_robots()
             robot->reset();
         }
     }
-
     for(std::set<std::thread*>::iterator e = this->threads_.begin(); e != this->threads_.end(); ++e)
     {
         std::cout << "wait for thread exit..." << std::endl;
@@ -203,7 +179,6 @@ void robot_manager::offline_all_robots()
 
 void robot_manager::dispatch_bye(ws_client* client)
 {
-    std::cout << "dispatch_bye:" << client->id() << std::endl;
     ddz_robot* robot = (ddz_robot*)client;
     robot->set_available(false);
     robot->set_command_dispatcher(NULL);
@@ -443,7 +418,7 @@ void robot_manager::on_desk_ready(ddz_robot* robot, command* command)
         std::shared_ptr<ddz_robot> robot_ptr = robot->get_robot_ptr();
         task_timer* check_timer = this->queue_task([robot_ptr, this, robot]()
         {
-            if(robot_ptr->is_availabled())
+            if(robot_ptr->is_available())
             {
                 this->check_find_other_desk(robot);
             }            
@@ -538,7 +513,7 @@ void robot_manager::on_desk_landlord(ddz_robot* robot, command* command)
         std::shared_ptr<ddz_robot> robot_ptr = robot->get_robot_ptr();
         this->queue_task([robot_ptr, this, robot]()
         {
-            if(robot_ptr->is_availabled())
+            if(robot_ptr->is_available())
             {
                 this->show_robot_pokers(robot);
             }            
@@ -608,7 +583,7 @@ void robot_manager::on_desk_poker_show(ddz_robot* robot, command* command)
             std::shared_ptr<ddz_robot> robot_ptr = robot->get_robot_ptr();
             this->queue_task([robot_ptr, this, robot]()
             {
-                if(robot_ptr->is_availabled())
+                if(robot_ptr->is_available())
                 {
                     this->show_robot_pokers(robot);
                 }                
